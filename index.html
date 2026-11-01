@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="StudyMind AI turns your class notes into a summary, a quiz and flashcards." />
+  <title>StudyMind AI – AI Study Assistant</title>
+
+  <!-- Apply saved theme BEFORE the page paints, so there is no white flash -->
+  <script>
+    try {
+      const saved = localStorage.getItem("sm-theme");
+      const preferred = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", saved || preferred);
+    } catch (e) { /* localStorage blocked – keep default */ }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Decorative animated background -->
+  <div class="bg" aria-hidden="true">
+    <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+  </div>
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-logo" aria-hidden="true">🧠</span>
+      <div>
+        <h1>StudyMind <span class="grad">AI</span></h1>
+        <p class="tagline">Turn messy notes into a summary, quiz &amp; flashcards</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="settingsToggle" class="icon-btn" type="button" aria-expanded="false" aria-controls="settingsPanel" title="Settings">⚙️<span class="sr-only">Settings</span></button>
+      <button id="themeToggle" class="icon-btn" type="button" aria-label="Toggle dark / light mode" title="Toggle theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- LEFT COLUMN -->
+    <section class="col-left">
+
+      <!-- Settings (API key) -->
+      <div id="settingsPanel" class="card settings" hidden>
+        <h2 class="card-title">⚙️ Settings</h2>
+        <p class="muted small">Your key is stored <strong>only in this browser</strong> (localStorage). It is never sent anywhere except to the AI provider you choose.</p>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="provider">AI Provider</label>
+            <select id="provider">
+              <option value="gemini">Google Gemini (free tier)</option>
+              <option value="groq">Groq (free tier)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="model">Model</label>
+            <input id="model" type="text" spellcheck="false" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="apiKey">API Key</label>
+          <div class="input-group">
+            <input id="apiKey" type="password" placeholder="Paste your own API key here" autocomplete="off" spellcheck="false" />
+            <button id="toggleKey" class="btn ghost" type="button">Show</button>
+          </div>
+          <a id="keyLink" class="small link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get a free key ↗️</a>
+        </div>
+
+        <div class="btn-row">
+          <button id="saveKey" class="btn primary" type="button">Save settings</button>
+          <button id="removeKey" class="btn ghost danger" type="button">Remove key</button>
+        </div>
+      </div>
+
+      <!-- Notes input -->
+      <div class="card">
+        <h2 class="card-title">📝 Your Notes</h2>
+
+        <div class="field">
+          <label for="notes">Paste class notes or type a topic</label>
+          <textarea id="notes" rows="9" placeholder="e.g. Photosynthesis is the process by which plants convert light energy into chemical energy…"></textarea>
+          <div class="counter-row">
+            <span id="charCount" class="small muted">0 / 6000</span>
+            <span id="limitWarn" class="small warn" hidden>⚠️ Very long text – it will be trimmed.</span>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="style">Answer style</label>
+            <select id="style">
+              <option value="exam">🎯 Exam-focused</option>
+              <option value="eli10">🧒 Explain like I'm 10</option>
+              <option value="detailed">📚 Detailed</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="difficulty">Quiz difficulty</label>
+            <select id="difficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button id="generateBtn" class="btn primary big" type="button">
+            <span class="btn-label">✨ Generate Study Material</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
+          </button>
+          <button id="regenBtn" class="btn ghost" type="button" disabled title="Generate a different answer for the same notes">🔄 Regenerate</button>
+        </div>
+
+        <div id="errorBox" class="alert error" role="alert" hidden></div>
+      </div>
+
+      <!-- Progress summary -->
+      <div class="card">
+        <h2 class="card-title">📈 Quiz Progress</h2>
+        <div id="progressSummary" class="stats">
+          <div class="stat"><span class="stat-num" id="statAttempts">0</span><span class="stat-label">Quizzes</span></div>
+          <div class="stat"><span class="stat-num" id="statAvg">–</span><span class="stat-label">Average</span></div>
+          <div class="stat"><span class="stat-num" id="statBest">–</span><span class="stat-label">Best</span></div>
+        </div>
+        <div id="scoreBars" class="score-bars" aria-label="Last quiz scores"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN -->
+    <section class="col-right">
+      <div class="card results">
+        <div class="tabs" role="tablist" aria-label="Study material">
+          <button class="tab active" role="tab" id="tab-summary" aria-selected="true" aria-controls="panel-summary" data-tab="summary">📄 Summary</button>
+          <button class="tab" role="tab" id="tab-quiz" aria-selected="false" aria-controls="panel-quiz" data-tab="quiz">❓ Quiz</button>
+          <button class="tab" role="tab" id="tab-cards" aria-selected="false" aria-controls="panel-cards" data-tab="cards">🃏 Flashcards</button>
+        </div>
+
+        <!-- Loading overlay -->
+        <div id="loader" class="loader" hidden>
+          <div class="spinner"></div>
+          <p>The AI is reading your notes…</p>
+        </div>
+
+        <!-- Empty state -->
+        <div id="emptyState" class="empty">
+          <div class="empty-emoji">📚</div>
+          <h3>Nothing here yet</h3>
+          <p class="muted">Paste your notes on the left and press <strong>Generate</strong>.<br />Your summary, quiz and flashcards will appear here.</p>
+        </div>
+
+        <!-- Summary -->
+        <div id="panel-summary" class="panel" role="tabpanel" aria-labelledby="tab-summary" hidden>
+          <div class="panel-head">
+            <h3 id="resultTitle">Summary</h3>
+            <div class="btn-row tight">
+              <button id="speakBtn" class="btn ghost sm" type="button">🔊 Read aloud</button>
+              <button id="copyBtn" class="btn ghost sm" type="button">📋 Copy</button>
+              <button id="downloadBtn" class="btn ghost sm" type="button">⬇️ Download</button>
+            </div>
+          </div>
+          <div id="summaryText" class="summary"></div>
+        </div>
+
+        <!-- Quiz -->
+        <div id="panel-quiz" class="panel" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+          <div class="panel-head">
+            <h3>Quiz</h3>
+            <div class="quiz-meta">
+              <span class="pill" id="quizProgressText">0 / 5 answered</span>
+              <span class="pill accent" id="quizScoreText">Score 0</span>
+            </div>
+          </div>
+          <div class="progress"><div id="quizBar" class="progress-bar"></div></div>
+          <div id="quizList" class="quiz-list"></div>
+          <div id="quizResult" class="quiz-result" hidden></div>
+        </div>
+
+        <!-- Flashcards -->
+        <div id="panel-cards" class="panel" role="tabpanel" aria-labelledby="tab-cards" hidden>
+          <div class="panel-head">
+            <h3>Flashcards</h3>
+            <span class="pill accent" id="knownCount">0 known</span>
+          </div>
+          <p class="muted small">Click a card to flip it. Mark each card as known or not known.</p>
+          <div id="cardGrid" class="card-grid"></div>
+        </div>
+      </div>
+
+      <!-- HISTORY -->
+      <div class="card history">
+        <div class="panel-head">
+          <h2 class="card-title">🕘 History</h2>
+          <button id="clearHistory" class="btn ghost sm danger" type="button">🗑 Clear all</button>
+        </div>
+        <input id="historySearch" type="search" placeholder="Search history…" aria-label="Search history" />
+        <ul id="historyList" class="history-list"></ul>
+        <p id="historyEmpty" class="muted small center">No history yet.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Built with HTML, CSS &amp; vanilla JavaScript · Your API key never leaves your browser.</p>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
